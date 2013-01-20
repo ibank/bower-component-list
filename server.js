@@ -1,61 +1,71 @@
-// Update once every hour
-const UPDATE_INTERVAL_IN_SECONDS = 60 * 60;
-const HTTP_PORT = process.env.PORT || 8001;
-
-var http = require('http');
-var Q = require('q');
-var gruntPlugins = require('./grunt-plugins');
+'use strict';
 var crypto = require('crypto');
 var connect = require('connect');
+var Q = require('q');
+var fetchComponents = require('./component-list');
+
+var componentListEntity;
+
+var HTTP_PORT = process.env.PORT || 8011;
+var UPDATE_INTERVAL_IN_MINUTES =  60;
 
 
-// pluginListEntity - promise {etag: '', json: ''}
-// using a promise so that clients can connect and wait for the initial entity
-var pluginListEntity = getPluginListEntity();
+function getComponentListEntity() {
+	var deferred = Q.defer();
 
-function getPluginListEntity() {
-  var deferred = Q.defer();
-  gruntPlugins.fetchPluginList().then(
+	fetchComponents().then(function (list) {
+		console.log('Finished fetching data from GitHub', '' + new Date());
 
-  function(pluginList) {
-    var entity = {
-      json: JSON.stringify(pluginList)
-    };
-    var shasum = crypto.createHash('sha1');
-    shasum.update(entity.json);
-    entity.etag = shasum.digest('hex');
-    deferred.resolve(entity);
-    // update the entity
-    pluginListEntity = deferred.promise;
-  }).fail(function(e) {
-    deferred.reject(e);
-  });
-  return deferred.promise;
+		// TODO: Find a way for the promise not to return null so this isn't needed
+		list = list.filter(function (el) {
+			return el !== null && el !== undefined;
+		});
+
+		var entity = {json: JSON.stringify(list)};
+		var shasum = crypto.createHash('sha1');
+		shasum.update(entity.json);
+		entity.etag = shasum.digest('hex');
+		deferred.resolve(entity);
+		// update the entity
+		componentListEntity = deferred.promise;
+	}).fail(function (err) {
+		deferred.reject(err);
+	});
+
+	return deferred.promise;
 }
-// Update function
-setInterval(function() {
-  getPluginListEntity();
-}, UPDATE_INTERVAL_IN_SECONDS * 1000);
 
-var app = connect().use(connect.logger('dev')).use(connect.errorHandler()).use(connect.timeout(10000)).use(function(request, response, next) {
-  // get the plugin list
-  pluginListEntity.then(function(entity) {
-    // Allow Cross-origin resource sharing
-    response.setHeader('Access-Control-Allow-Origin', '*');
-    response.setHeader("Content-Type", "application/json");
-    response.setHeader('ETag', entity.etag);
-    if (request.headers['if-none-match'] === entity.etag) {
-      response.statusCode = 304;
-      response.end();
-      return;
-    }
-    response.statusCode = 200;
-    response.end(new Buffer(entity.json));
-  }).fail(function(e) {
-    // something went wrong
-    next(e);
-  })
-}).listen(HTTP_PORT);
+function getComponentList(request, response, next) {
+	componentListEntity.then(function (entity) {
+		// allow CORS
+		response.setHeader('ETag', entity.etag);
+		response.setHeader('Access-Control-Allow-Origin', '*');
+		response.setHeader('Content-Type', 'application/json');
 
+		if (request.headers['if-none-match'] === entity.etag) {
+			response.statusCode = 304;
+			response.end();
+			return;
+		}
+
+		response.statusCode = 200;
+		response.end(new Buffer(entity.json));
+	}).fail(function(err) {
+		next(err);
+	});
+}
+
+// componentListEntity - promise {etag: '', json: ''}
+// using a promise so that clients can connect and wait for the initial entity
+componentListEntity = getComponentListEntity();
+
+connect()
+	.use(connect.errorHandler())
+	.use(connect.timeout(10000))
+	.use(connect.logger('dev'))
+	.use(getComponentList)
+	.listen(HTTP_PORT);
+
+setInterval(getComponentListEntity, UPDATE_INTERVAL_IN_MINUTES * 1000 * 60);
 
 console.log('Server running on port ' + HTTP_PORT);
