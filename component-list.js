@@ -10,7 +10,7 @@ function createComponentData(name, data) {
 		name: name,
 		description: data.description,
 		owner: data.owner.login,
-		website: data.homepage || data.html_url,
+		website: data.html_url,
 		forks: data.forks,
 		stars: data.watchers,
 		created: data.created_at,
