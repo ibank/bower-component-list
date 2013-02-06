@@ -2,7 +2,7 @@
 
 Aggregated list of components from the [Bower registry](https://bower.herokuapp.com/packages) and GitHub metadata.
 
-Currently used as the back-end for the [Bower components site](http://sindresorhus.com/bower-components/).
+Currently used as the back-end for the [Bower components site](https://github.com/sindresorhus/bower-components).
 
 
 ### Getting Started
